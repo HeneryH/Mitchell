@@ -1,0 +1,7 @@
+{
+  "name": "Bill Mitchell Auto Voice Scheduler",
+  "description": "A smart scheduling assistant for Bill Mitchell Auto Service Station using Gemini 2.5 Live API.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
