@@ -3,7 +3,7 @@ import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration } f
 import { base64ToUint8Array, decodeAudioData, createPcmBlob } from '../utils/audioUtils';
 import { Appointment, LogEntry, ServiceType } from '../types';
 import { GEMINI_MODEL, SYSTEM_INSTRUCTION } from '../constants';
-import { getServiceDuration, isSlotAvailable } from '../utils/dateUtils';
+import { getServiceDuration } from '../utils/dateUtils';
 
 // Polyfill type definition for build environment
 declare var process: any;
@@ -29,7 +29,6 @@ export const useLiveScheduler = () => {
 
   const addAppointment = useCallback((appt: Appointment) => {
     setAppointments(prev => [...prev, appt]);
-    console.log(`[Mock Email] Confirmation to ${appt.customerName}`);
   }, []);
 
   const addLogEntry = useCallback((summary: string) => {
@@ -42,7 +41,7 @@ export const useLiveScheduler = () => {
     parameters: {
       type: Type.OBJECT,
       properties: {
-        dateString: { type: Type.STRING, description: 'ISO 8601 Date String' },
+        dateString: { type: Type.STRING, description: 'ISO 8601 Date String (e.g. 2024-11-25T14:00:00)' },
         serviceType: { type: Type.STRING, description: 'Type of service' }
       },
       required: ['dateString', 'serviceType']
@@ -80,48 +79,62 @@ export const useLiveScheduler = () => {
 
   const handleToolCall = useCallback(async (functionCalls: any[]) => {
     const responses = [];
-    const currentAppointments = appointmentsRef.current;
 
     for (const fc of functionCalls) {
+      console.log(`[Tool Call] ${fc.name}`, fc.args);
       let result: any = { error: 'Unknown function' };
       try {
         if (fc.name === 'checkAvailability') {
             const { dateString, serviceType } = fc.args;
-            const start = new Date(dateString);
-            if (isNaN(start.getTime())) throw new Error(`Invalid date: ${dateString}`);
             const duration = getServiceDuration(serviceType);
-            const bay1Free = isSlotAvailable(start, duration, 'bay1', currentAppointments);
-            const bay2Free = isSlotAvailable(start, duration, 'bay2', currentAppointments);
             
-            if (bay1Free) result = { available: true, bayId: 'bay1', message: 'Bay 1 is available.' };
-            else if (bay2Free) result = { available: true, bayId: 'bay2', message: 'Bay 2 is available.' };
-            else result = { available: false, message: 'No availability.' };
+            // Call Backend API
+            const apiRes = await fetch('/api/availability', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ start: dateString, duration })
+            });
+            result = await apiRes.json();
         }
         else if (fc.name === 'bookAppointment') {
             const { bayId, dateString, serviceType, customerName, customerContact, vehicleMake, vehicleModel, vehicleYear } = fc.args;
-            const start = new Date(dateString);
             const duration = getServiceDuration(serviceType);
-            const end = new Date(start.getTime() + duration * 3600000);
-
-            if (!isSlotAvailable(start, duration, bayId, currentAppointments)) {
-                 result = { status: 'failed', message: 'Slot taken.' };
+            
+            // Call Backend API
+            const apiRes = await fetch('/api/book', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                bayId, start: dateString, duration, serviceType, customerName, contact: customerContact,
+                vehicle: `${vehicleYear || ''} ${vehicleMake || ''} ${vehicleModel || ''}`.trim()
+              })
+            });
+            const data = await apiRes.json();
+            
+            if (data.status === 'confirmed') {
+                const start = new Date(dateString);
+                addAppointment({
+                    id: data.eventId, bayId, start, end: new Date(start.getTime() + duration*3600000),
+                    serviceType: serviceType as ServiceType, customerName, customerContact,
+                    vehicleMake, vehicleModel, vehicleYear
+                });
+                result = { status: 'confirmed', details: 'Booked successfully and logged.' };
             } else {
-                const newAppt: Appointment = {
-                    id: Math.random().toString(36).substring(7),
-                    bayId, start, end, serviceType: serviceType as ServiceType,
-                    customerName, customerContact, vehicleMake, vehicleModel, vehicleYear
-                };
-                addAppointment(newAppt);
-                result = { status: 'confirmed', appointmentId: newAppt.id };
+                result = { status: 'failed', error: data.error };
             }
         }
         else if (fc.name === 'logCall') {
+            await fetch('/api/log', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ summary: fc.args.summary })
+            });
             addLogEntry(fc.args.summary);
             result = { status: 'logged' };
         }
       } catch (error: any) {
-          console.error(error);
-          result = { error: error.message };
+          console.error('[Tool Error]', error);
+          result = { error: `System Error: ${error.message}` };
       }
       responses.push({ id: fc.id, name: fc.name, response: { result } });
     }
@@ -169,16 +182,16 @@ export const useLiveScheduler = () => {
           }
           if (msg.toolCall) {
              try {
-                // IMPORTANT: TypeScript workaround for strict null checks on optional property
                 const calls = msg.toolCall.functionCalls;
                 if (calls && calls.length > 0) {
                     const responses = await handleToolCall(calls);
                     sessionPromise.then(s => s.sendToolResponse({ functionResponses: responses }));
                 }
-             } catch {}
+             } catch (e) {
+                 console.error("Tool call processing failed", e);
+             }
           }
           
-          // IMPORTANT: Robust optional chaining for deep properties to fix build error
           const audioStr = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
           
           if (audioStr && outputAudioContextRef.current) {
