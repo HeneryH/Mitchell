@@ -5,6 +5,9 @@ import { Appointment, LogEntry, ServiceType } from '../types';
 import { GEMINI_MODEL, SYSTEM_INSTRUCTION } from '../constants';
 import { getServiceDuration, isSlotAvailable } from '../utils/dateUtils';
 
+// Polyfill type definition for build environment
+declare var process: any;
+
 export const useLiveScheduler = () => {
   const [connected, setConnected] = useState(false);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -166,14 +169,18 @@ export const useLiveScheduler = () => {
           }
           if (msg.toolCall) {
              try {
-                // Safely handle possible undefined functionCalls
-                const calls = msg.toolCall.functionCalls || [];
-                const responses = await handleToolCall(calls);
-                sessionPromise.then(s => s.sendToolResponse({ functionResponses: responses }));
+                // IMPORTANT: TypeScript workaround for strict null checks on optional property
+                const calls = msg.toolCall.functionCalls;
+                if (calls && calls.length > 0) {
+                    const responses = await handleToolCall(calls);
+                    sessionPromise.then(s => s.sendToolResponse({ functionResponses: responses }));
+                }
              } catch {}
           }
-          // Safely access deep properties
+          
+          // IMPORTANT: Robust optional chaining for deep properties to fix build error
           const audioStr = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+          
           if (audioStr && outputAudioContextRef.current) {
             const ctx = outputAudioContextRef.current;
             nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
