@@ -166,11 +166,14 @@ export const useLiveScheduler = () => {
           }
           if (msg.toolCall) {
              try {
-                const responses = await handleToolCall(msg.toolCall.functionCalls);
+                // Safely handle possible undefined functionCalls
+                const calls = msg.toolCall.functionCalls || [];
+                const responses = await handleToolCall(calls);
                 sessionPromise.then(s => s.sendToolResponse({ functionResponses: responses }));
              } catch {}
           }
-          const audioStr = msg.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+          // Safely access deep properties
+          const audioStr = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
           if (audioStr && outputAudioContextRef.current) {
             const ctx = outputAudioContextRef.current;
             nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { SERVICES } from '../constants';
 import { ServiceType, Appointment } from '../types';
-import { Send, Calendar, Clock, User, Phone, Wrench, AlertCircle, CheckCircle, Car } from 'lucide-react';
+import { Send, AlertCircle, CheckCircle } from 'lucide-react';
 import { isSlotAvailable, getServiceDuration } from '../utils/dateUtils';
 
 interface ServiceRequestFormProps {

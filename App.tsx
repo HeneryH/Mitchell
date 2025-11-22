@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { Mic, MicOff, Phone, Calendar, Clock, Settings, FileText, Menu, X, MapPin } from 'lucide-react';
+import { Mic, MicOff, Phone, Clock, Settings, FileText, Menu, X, MapPin } from 'lucide-react';
 import { useLiveScheduler } from './hooks/useLiveScheduler';
 import CalendarView from './components/CalendarView';
 import Visualizer from './components/Visualizer';
 import ServiceRequestForm from './components/ServiceRequestForm';
 import TeamSection from './components/TeamSection';
 import Testimonials from './components/Testimonials';
-import { SERVICES, OPERATING_HOURS, CONTACT_INFO } from './constants';
+import { SERVICES, CONTACT_INFO } from './constants';
 
 const App: React.FC = () => {
   const { connected, connect, disconnect, analyserNode, appointments, addAppointment, logs, addLogEntry, currentDate, setCurrentDate } = useLiveScheduler();
