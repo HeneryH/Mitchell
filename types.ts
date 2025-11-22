@@ -1,4 +1,3 @@
-
 export enum ServiceType {
   OIL_CHANGE = 'Oil Change',
   ANNUAL_INSPECTION = 'Annual Inspection',

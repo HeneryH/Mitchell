@@ -1,35 +1,12 @@
 steps:
-  # 1. Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
-    args: 
-      - 'build'
-      - '--build-arg'
-      - 'API_KEY=${_API_KEY}'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/bill-mitchell-auto'
-      - '.'
-
-  # 2. Push the image to Container Registry
+    args: ['build', '--build-arg', 'API_KEY=${_API_KEY}', '-t', 'gcr.io/$PROJECT_ID/bill-mitchell-auto', '.']
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/bill-mitchell-auto']
-
-  # 3. Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
-    args:
-      - 'run'
-      - 'deploy'
-      - 'bill-mitchell-auto'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/bill-mitchell-auto'
-      - '--region'
-      - 'us-central1'
-      - '--platform'
-      - 'managed'
-      - '--allow-unauthenticated'
-
+    args: ['run', 'deploy', 'bill-mitchell-auto', '--image', 'gcr.io/$PROJECT_ID/bill-mitchell-auto', '--region', 'us-central1', '--platform', 'managed', '--allow-unauthenticated']
 images:
   - 'gcr.io/$PROJECT_ID/bill-mitchell-auto'
-
 substitutions:
   _API_KEY: 'needs-api-key-substitution'

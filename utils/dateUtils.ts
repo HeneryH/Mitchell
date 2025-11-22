@@ -17,17 +17,13 @@ export const isSlotAvailable = (
 ): boolean => {
   const end = new Date(start.getTime() + durationHours * 60 * 60 * 1000);
   
-  // Check operating hours
   if (start.getHours() < OPERATING_HOURS.start || end.getHours() > OPERATING_HOURS.end) {
     return false;
   }
-  // Check sunday
   if (start.getDay() === 0) return false; 
 
-  // Check collisions
   return !appointments.some(appt => {
     if (appt.bayId !== bayId) return false;
-    // Simple collision detection: (StartA < EndB) and (EndA > StartB)
     return start < appt.end && end > appt.start;
   });
 };

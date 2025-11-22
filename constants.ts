@@ -1,4 +1,3 @@
-
 import { Service, ServiceType, Bay, TeamMember, Testimonial } from './types';
 
 export const CALENDAR_IDS = {
@@ -11,7 +10,6 @@ export const SHEET_ID = '1eEGbrkgXYlr_nqoYITerV3bpn_0Bd_5cS8sfxFb-04Y';
 export const CONTACT_INFO = {
   phone: '(215) 822-1056',
   address: '57 Bristol Rd, Chalfont, PA',
-  // Using generic embed for the demo
   mapUrl: 'https://maps.google.com/maps?q=57+Bristol+Rd,+Chalfont,+PA&t=&z=15&ie=UTF8&iwloc=&output=embed'
 };
 
