@@ -50,6 +50,62 @@ function calculateTimeWindow(startString, durationHours) {
 
 // --- API Endpoints ---
 
+// Get Appointments (For Calendar View)
+app.get('/api/appointments', async (req, res) => {
+  try {
+    const { start, end } = req.query;
+    
+    // We fetch a slightly wider range to be safe, or just trust the query params
+    const allEvents = [];
+
+    for (const [bayId, calendarId] of Object.entries(CALENDAR_IDS)) {
+      const response = await calendar.events.list({
+        calendarId,
+        timeMin: start,
+        timeMax: end,
+        singleEvents: true,
+        orderBy: 'startTime',
+        timeZone: 'America/New_York'
+      });
+
+      if (response.data.items) {
+        const bayEvents = response.data.items.map(event => {
+            // Parse summary "ServiceType - CustomerName"
+            const summaryParts = (event.summary || '').split(' - ');
+            const serviceType = summaryParts[0] || 'Unknown Service';
+            const customerName = summaryParts.slice(1).join(' - ') || 'Unknown Customer';
+
+            // Parse description to extract other fields if possible
+            const desc = event.description || '';
+            const phoneMatch = desc.match(/Phone: (.*)/);
+            const emailMatch = desc.match(/Email: (.*)/);
+            const vehicleMatch = desc.match(/Vehicle: (.*)/);
+
+            return {
+                id: event.id,
+                bayId: bayId,
+                start: event.start.dateTime || event.start.date, // ISO string
+                end: event.end.dateTime || event.end.date,     // ISO string
+                serviceType: serviceType,
+                customerName: customerName,
+                customerPhone: phoneMatch ? phoneMatch[1] : '',
+                customerEmail: emailMatch ? emailMatch[1] : '',
+                // Put the full vehicle string in Make for display purposes since we can't easily split it back
+                vehicleMake: vehicleMatch ? vehicleMatch[1] : '', 
+                vehicleModel: '',
+                vehicleYear: '' 
+            };
+        });
+        allEvents.push(...bayEvents);
+      }
+    }
+    res.json(allEvents);
+  } catch (error) {
+    console.error('Get Appointments Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Check Availability
 app.post('/api/availability', async (req, res) => {
   try {
@@ -60,7 +116,7 @@ app.post('/api/availability', async (req, res) => {
     // Query Google Calendar FreeBusy API
     const response = await calendar.freebusy.query({
       requestBody: {
-        timeMin: timeMin + 'Z', // Fallback to treating it as UTC if strict ISO needed, but relying on timeZone
+        timeMin: timeMin + 'Z', // Fallback to treating it as UTC if strict ISO needed
         timeMax: timeMax + 'Z', 
         timeZone: 'America/New_York', 
         items: [{ id: CALENDAR_IDS.bay1 }, { id: CALENDAR_IDS.bay2 }]
