@@ -27,6 +27,35 @@ export const useLiveScheduler = () => {
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const sessionPromiseRef = useRef<Promise<any> | null>(null);
 
+  // Fetch appointments from backend
+  const fetchAppointments = useCallback(async () => {
+    try {
+        const start = new Date(currentDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(currentDate);
+        end.setHours(23, 59, 59, 999);
+
+        const res = await fetch(`/api/appointments?start=${start.toISOString()}&end=${end.toISOString()}`);
+        if (res.ok) {
+            const data = await res.json();
+            // Convert string dates back to Date objects
+            const parsedData = data.map((d: any) => ({
+                ...d,
+                start: new Date(d.start),
+                end: new Date(d.end)
+            }));
+            setAppointments(parsedData);
+        }
+    } catch (e) {
+        console.error("Failed to fetch appointments", e);
+    }
+  }, [currentDate]);
+
+  // Fetch on mount and when date changes
+  useEffect(() => {
+    fetchAppointments();
+  }, [fetchAppointments]);
+
   const addAppointment = useCallback((appt: Appointment) => {
     setAppointments(prev => [...prev, appt]);
   }, []);
