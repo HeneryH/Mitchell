@@ -58,12 +58,13 @@ export const useLiveScheduler = () => {
         dateString: { type: Type.STRING, description: 'ISO 8601 Start date' },
         serviceType: { type: Type.STRING, description: 'Service type' },
         customerName: { type: Type.STRING, description: 'Customer name' },
-        customerContact: { type: Type.STRING, description: 'Contact info' },
+        customerPhone: { type: Type.STRING, description: 'Customer phone number' },
+        customerEmail: { type: Type.STRING, description: 'Customer email address' },
         vehicleMake: { type: Type.STRING, description: 'Vehicle Make' },
         vehicleModel: { type: Type.STRING, description: 'Vehicle Model' },
         vehicleYear: { type: Type.STRING, description: 'Vehicle Year' }
       },
-      required: ['bayId', 'dateString', 'serviceType', 'customerName', 'customerContact']
+      required: ['bayId', 'dateString', 'serviceType', 'customerName', 'customerPhone', 'customerEmail']
     }
   };
 
@@ -97,7 +98,7 @@ export const useLiveScheduler = () => {
             result = await apiRes.json();
         }
         else if (fc.name === 'bookAppointment') {
-            const { bayId, dateString, serviceType, customerName, customerContact, vehicleMake, vehicleModel, vehicleYear } = fc.args;
+            const { bayId, dateString, serviceType, customerName, customerPhone, customerEmail, vehicleMake, vehicleModel, vehicleYear } = fc.args;
             const duration = getServiceDuration(serviceType);
             
             // Call Backend API
@@ -105,7 +106,8 @@ export const useLiveScheduler = () => {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ 
-                bayId, start: dateString, duration, serviceType, customerName, contact: customerContact,
+                bayId, start: dateString, duration, serviceType, 
+                customerName, customerPhone, customerEmail,
                 vehicle: `${vehicleYear || ''} ${vehicleMake || ''} ${vehicleModel || ''}`.trim()
               })
             });
@@ -115,7 +117,8 @@ export const useLiveScheduler = () => {
                 const start = new Date(dateString);
                 addAppointment({
                     id: data.eventId, bayId, start, end: new Date(start.getTime() + duration*3600000),
-                    serviceType: serviceType as ServiceType, customerName, customerContact,
+                    serviceType: serviceType as ServiceType, customerName, 
+                    customerPhone, customerEmail,
                     vehicleMake, vehicleModel, vehicleYear
                 });
                 result = { status: 'confirmed', details: 'Booked successfully and logged.' };

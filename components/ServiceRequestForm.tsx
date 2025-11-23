@@ -12,7 +12,7 @@ interface ServiceRequestFormProps {
 
 const ServiceRequestForm: React.FC<ServiceRequestFormProps> = ({ onLogRequest, appointments, addAppointment }) => {
   const [formData, setFormData] = useState({
-    name: '', contact: '', serviceType: SERVICES[0].name, date: '', time: '', vehicleMake: '', vehicleModel: '', vehicleYear: ''
+    name: '', phone: '', email: '', serviceType: SERVICES[0].name, date: '', time: '', vehicleMake: '', vehicleModel: '', vehicleYear: ''
   });
   const [status, setStatus] = useState<'idle' | 'success' | 'denied'>('idle');
 
@@ -30,7 +30,10 @@ const ServiceRequestForm: React.FC<ServiceRequestFormProps> = ({ onLogRequest, a
     if (assignedBayId) {
       addAppointment({
         id: Math.random().toString(36).substring(7), bayId: assignedBayId, start, end,
-        serviceType: formData.serviceType as ServiceType, customerName: formData.name, customerContact: formData.contact,
+        serviceType: formData.serviceType as ServiceType, 
+        customerName: formData.name, 
+        customerPhone: formData.phone,
+        customerEmail: formData.email,
         vehicleMake: formData.vehicleMake, vehicleModel: formData.vehicleModel, vehicleYear: formData.vehicleYear
       });
       onLogRequest(`Online Booking: ${formData.name}, ${formData.serviceType}`);
@@ -54,8 +57,10 @@ const ServiceRequestForm: React.FC<ServiceRequestFormProps> = ({ onLogRequest, a
           {status === 'denied' && <div className="bg-red-50 p-4 text-red-800 flex gap-2 rounded"><AlertCircle/> Slot Unavailable</div>}
           <div className="grid grid-cols-2 gap-4">
              <input type="text" name="name" required placeholder="Name" onChange={handleChange} className="p-2 border rounded w-full" />
-             <input type="text" name="contact" required placeholder="Contact" onChange={handleChange} className="p-2 border rounded w-full" />
+             <input type="text" name="phone" required placeholder="Phone" onChange={handleChange} className="p-2 border rounded w-full" />
           </div>
+          <input type="email" name="email" required placeholder="Email Address" onChange={handleChange} className="p-2 border rounded w-full" />
+          
           <div className="grid grid-cols-3 gap-2">
              <input type="text" name="vehicleYear" placeholder="Year" onChange={handleChange} className="p-2 border rounded w-full" />
              <input type="text" name="vehicleMake" placeholder="Make" onChange={handleChange} className="p-2 border rounded w-full" />

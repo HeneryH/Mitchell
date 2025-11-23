@@ -19,7 +19,8 @@ export interface Appointment {
   end: Date;
   serviceType: ServiceType;
   customerName: string;
-  customerContact: string;
+  customerPhone: string;
+  customerEmail: string;
   vehicleMake?: string;
   vehicleModel?: string;
   vehicleYear?: string;

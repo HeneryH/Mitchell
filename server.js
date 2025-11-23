@@ -69,7 +69,7 @@ app.post('/api/availability', async (req, res) => {
 // Book Appointment
 app.post('/api/book', async (req, res) => {
   try {
-    const { bayId, start, duration, serviceType, customerName, contact, vehicle } = req.body;
+    const { bayId, start, duration, serviceType, customerName, customerPhone, customerEmail, vehicle } = req.body;
     const calendarId = CALENDAR_IDS[bayId];
     if (!calendarId) throw new Error('Invalid Bay ID');
 
@@ -78,7 +78,7 @@ app.post('/api/book', async (req, res) => {
 
     const event = {
       summary: `${serviceType} - ${customerName}`,
-      description: `Contact: ${contact}\nVehicle: ${vehicle}`,
+      description: `Phone: ${customerPhone}\nEmail: ${customerEmail}\nVehicle: ${vehicle}`,
       start: { 
         dateTime: startDate.toISOString(),
         timeZone: 'America/New_York' // Set event timezone
@@ -95,7 +95,14 @@ app.post('/api/book', async (req, res) => {
     });
 
     // Also log to sheets
-    await logToSheet(new Date(), `Booked: ${customerName}, ${serviceType}, ${bayId}`);
+    // Columns: Log Date, Log Time, Summary, Appt Date, Appt Time, Phone, Email
+    await logToSheet({
+      summary: `Booked: ${customerName}, ${serviceType}`,
+      apptDate: startDate.toLocaleDateString(),
+      apptTime: startDate.toLocaleTimeString(),
+      phone: customerPhone,
+      email: customerEmail
+    });
 
     res.json({ status: 'confirmed', eventId: response.data.id });
   } catch (error) {
@@ -108,7 +115,7 @@ app.post('/api/book', async (req, res) => {
 app.post('/api/log', async (req, res) => {
   try {
     const { summary } = req.body;
-    await logToSheet(new Date(), summary);
+    await logToSheet({ summary });
     res.json({ status: 'logged' });
   } catch (error) {
     console.error('Logging Error:', error);
@@ -116,15 +123,25 @@ app.post('/api/log', async (req, res) => {
   }
 });
 
-async function logToSheet(date, summary) {
+async function logToSheet(data) {
   try {
+    const now = new Date();
+    // Headers (Implicit): Date, Time, Summary, Appt Date, Appt Time, Phone, Email
+    const values = [[
+      now.toLocaleDateString(), 
+      now.toLocaleTimeString(), 
+      data.summary || '',
+      data.apptDate || '',
+      data.apptTime || '',
+      data.phone || '',
+      data.email || ''
+    ]];
+
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: 'Sheet1!A:C', 
+      range: 'Sheet1!A:G', // Updated range to capture more columns
       valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [[date.toLocaleDateString(), date.toLocaleTimeString(), summary]]
-      }
+      requestBody: { values }
     });
   } catch (e) {
     console.error("Sheet Log Failed", e);
