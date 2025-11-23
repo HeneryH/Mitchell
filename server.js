@@ -11,7 +11,7 @@ app.use(express.json());
 // Serve static files from the build directory
 app.use(express.static('dist'));
 
-// Configuration from your prompt
+// Configuration
 const CALENDAR_IDS = {
   bay1: '27f018994f9455e1ab137d5ed78ad92248c57989b5e9978ec08ffee402bcf521@group.calendar.google.com',
   bay2: '3145ac069ae08a5a0d9b902bb135227c52e5c1ae728e2cde1cfbd1aebd0741b1@group.calendar.google.com'
@@ -19,7 +19,6 @@ const CALENDAR_IDS = {
 const SHEET_ID = '1eEGbrkgXYlr_nqoYITerV3bpn_0Bd_5cS8sfxFb-04Y';
 
 // Initialize Google Auth
-// These env vars will be passed during deployment
 const auth = new google.auth.GoogleAuth({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -48,6 +47,7 @@ app.post('/api/availability', async (req, res) => {
       requestBody: {
         timeMin: startDate.toISOString(),
         timeMax: endDate.toISOString(),
+        timeZone: 'America/New_York', // Enforce NY Timezone
         items: [{ id: CALENDAR_IDS.bay1 }, { id: CALENDAR_IDS.bay2 }]
       }
     });
@@ -79,8 +79,14 @@ app.post('/api/book', async (req, res) => {
     const event = {
       summary: `${serviceType} - ${customerName}`,
       description: `Contact: ${contact}\nVehicle: ${vehicle}`,
-      start: { dateTime: startDate.toISOString() },
-      end: { dateTime: endDate.toISOString() },
+      start: { 
+        dateTime: startDate.toISOString(),
+        timeZone: 'America/New_York' // Set event timezone
+      },
+      end: { 
+        dateTime: endDate.toISOString(),
+        timeZone: 'America/New_York' // Set event timezone
+      },
     };
 
     const response = await calendar.events.insert({
@@ -125,7 +131,7 @@ async function logToSheet(date, summary) {
   }
 }
 
-// Handle SPA routing - send all other requests to index.html
+// Handle SPA routing
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
