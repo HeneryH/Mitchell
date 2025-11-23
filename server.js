@@ -33,21 +33,36 @@ const auth = new google.auth.GoogleAuth({
 const calendar = google.calendar({ version: 'v3', auth });
 const sheets = google.sheets({ version: 'v4', auth });
 
+// Helper: Calculate end time while preserving wall-clock values
+// Input: "2023-11-25T14:00:00" -> Output: { start: "2023-11-25T14:00:00", end: "2023-11-25T15:00:00" }
+function calculateTimeWindow(startString, durationHours) {
+    // Treat the input string as UTC to do math, then strip the Z to keep it abstract
+    // This prevents Node.js from shifting the time based on the server's local timezone
+    const dateObj = new Date(startString.endsWith('Z') ? startString : startString + 'Z');
+    const endDateObj = new Date(dateObj.getTime() + durationHours * 3600000);
+    
+    // Return strings without 'Z', representing local wall time
+    return {
+        start: dateObj.toISOString().replace('Z', ''),
+        end: endDateObj.toISOString().replace('Z', '')
+    };
+}
+
 // --- API Endpoints ---
 
 // Check Availability
 app.post('/api/availability', async (req, res) => {
   try {
     const { start, duration } = req.body;
-    const startDate = new Date(start);
-    const endDate = new Date(startDate.getTime() + duration * 3600000);
+    // Calculate window maintaining abstract time
+    const { start: timeMin, end: timeMax } = calculateTimeWindow(start, duration);
 
     // Query Google Calendar FreeBusy API
     const response = await calendar.freebusy.query({
       requestBody: {
-        timeMin: startDate.toISOString(),
-        timeMax: endDate.toISOString(),
-        timeZone: 'America/New_York', // Enforce NY Timezone
+        timeMin: timeMin + 'Z', // Fallback to treating it as UTC if strict ISO needed, but relying on timeZone
+        timeMax: timeMax + 'Z', 
+        timeZone: 'America/New_York', 
         items: [{ id: CALENDAR_IDS.bay1 }, { id: CALENDAR_IDS.bay2 }]
       }
     });
@@ -73,19 +88,19 @@ app.post('/api/book', async (req, res) => {
     const calendarId = CALENDAR_IDS[bayId];
     if (!calendarId) throw new Error('Invalid Bay ID');
 
-    const startDate = new Date(start);
-    const endDate = new Date(startDate.getTime() + duration * 3600000);
+    // Calculate end time string
+    const { start: startStr, end: endStr } = calculateTimeWindow(start, duration);
 
     const event = {
       summary: `${serviceType} - ${customerName}`,
       description: `Phone: ${customerPhone}\nEmail: ${customerEmail}\nVehicle: ${vehicle}`,
       start: { 
-        dateTime: startDate.toISOString(),
-        timeZone: 'America/New_York' // Set event timezone
+        dateTime: startStr, // Sending "2023-11-25T14:00:00" (Floating)
+        timeZone: 'America/New_York' // Telling Google "That string is NY time"
       },
       end: { 
-        dateTime: endDate.toISOString(),
-        timeZone: 'America/New_York' // Set event timezone
+        dateTime: endStr,
+        timeZone: 'America/New_York'
       },
     };
 
@@ -95,11 +110,10 @@ app.post('/api/book', async (req, res) => {
     });
 
     // Also log to sheets
-    // Columns: Log Date, Log Time, Summary, Appt Date, Appt Time, Phone, Email
     await logToSheet({
       summary: `Booked: ${customerName}, ${serviceType}`,
-      apptDate: startDate.toLocaleDateString(),
-      apptTime: startDate.toLocaleTimeString(),
+      apptDate: startStr.split('T')[0],
+      apptTime: startStr.split('T')[1],
       phone: customerPhone,
       email: customerEmail
     });
@@ -126,10 +140,9 @@ app.post('/api/log', async (req, res) => {
 async function logToSheet(data) {
   try {
     const now = new Date();
-    // Headers (Implicit): Date, Time, Summary, Appt Date, Appt Time, Phone, Email
     const values = [[
-      now.toLocaleDateString(), 
-      now.toLocaleTimeString(), 
+      now.toLocaleDateString('en-US', { timeZone: 'America/New_York' }), 
+      now.toLocaleTimeString('en-US', { timeZone: 'America/New_York' }), 
       data.summary || '',
       data.apptDate || '',
       data.apptTime || '',
@@ -139,7 +152,7 @@ async function logToSheet(data) {
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SHEET_ID,
-      range: 'Sheet1!A:G', // Updated range to capture more columns
+      range: 'Sheet1!A:G', 
       valueInputOption: 'USER_ENTERED',
       requestBody: { values }
     });
