@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { SERVICES } from '../constants';
 import { ServiceType, Appointment } from '../types';
-import { Send, AlertCircle, CheckCircle } from 'lucide-react';
-import { isSlotAvailable, getServiceDuration } from '../utils/dateUtils';
+import { Send, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { getServiceDuration } from '../utils/dateUtils';
 
 interface ServiceRequestFormProps {
   onLogRequest: (summary: string) => void;
@@ -10,38 +10,93 @@ interface ServiceRequestFormProps {
   addAppointment: (appt: Appointment) => void;
 }
 
-const ServiceRequestForm: React.FC<ServiceRequestFormProps> = ({ onLogRequest, appointments, addAppointment }) => {
+const ServiceRequestForm: React.FC<ServiceRequestFormProps> = ({ onLogRequest, addAppointment }) => {
   const [formData, setFormData] = useState({
     name: '', phone: '', email: '', serviceType: SERVICES[0].name, date: '', time: '', vehicleMake: '', vehicleModel: '', vehicleYear: ''
   });
-  const [status, setStatus] = useState<'idle' | 'success' | 'denied'>('idle');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'denied'>('idle');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setStatus('loading');
+    
     const start = new Date(`${formData.date}T${formData.time}`);
-    if (isNaN(start.getTime())) return alert("Invalid Date");
+    if (isNaN(start.getTime())) {
+        alert("Invalid Date");
+        setStatus('idle');
+        return;
+    }
     const duration = getServiceDuration(formData.serviceType);
-    const end = new Date(start.getTime() + duration * 3600000);
 
-    let assignedBayId = null;
-    if (isSlotAvailable(start, duration, 'bay1', appointments)) assignedBayId = 'bay1';
-    else if (isSlotAvailable(start, duration, 'bay2', appointments)) assignedBayId = 'bay2';
+    try {
+        // 1. Check Availability for Bay 1
+        let assignedBayId = null;
+        
+        const checkBay1 = await fetch('/api/availability', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ start: start.toISOString(), duration })
+        });
+        const bay1Data = await checkBay1.json();
+        
+        if (bay1Data.available && bay1Data.bayId === 'bay1') {
+            assignedBayId = 'bay1';
+        } else {
+            // Check Bay 2 if Bay 1 is busy (NOTE: Logic simplified, ideally backend handles bay selection)
+            // Since backend availability check queries both, let's trust the backend response if it suggests a bay.
+            if (bay1Data.available) {
+                assignedBayId = bay1Data.bayId;
+            }
+        }
 
-    if (assignedBayId) {
-      addAppointment({
-        id: Math.random().toString(36).substring(7), bayId: assignedBayId, start, end,
-        serviceType: formData.serviceType as ServiceType, 
-        customerName: formData.name, 
-        customerPhone: formData.phone,
-        customerEmail: formData.email,
-        vehicleMake: formData.vehicleMake, vehicleModel: formData.vehicleModel, vehicleYear: formData.vehicleYear
-      });
-      onLogRequest(`Online Booking: ${formData.name}, ${formData.serviceType}`);
-      setStatus('success');
-      setTimeout(() => setStatus('idle'), 5000);
-    } else {
-      onLogRequest(`Denied: ${formData.name}, Slot Unavailable`);
-      setStatus('denied');
+        if (assignedBayId) {
+            // 2. Book Appointment
+            const bookRes = await fetch('/api/book', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    bayId: assignedBayId,
+                    start: start.toISOString(),
+                    duration,
+                    serviceType: formData.serviceType,
+                    customerName: formData.name,
+                    customerPhone: formData.phone,
+                    customerEmail: formData.email,
+                    vehicle: `${formData.vehicleYear} ${formData.vehicleMake} ${formData.vehicleModel}`
+                })
+            });
+            const bookData = await bookRes.json();
+
+            if (bookData.status === 'confirmed') {
+                // Update UI
+                const end = new Date(start.getTime() + duration * 3600000);
+                addAppointment({
+                    id: bookData.eventId, 
+                    bayId: assignedBayId, 
+                    start, 
+                    end,
+                    serviceType: formData.serviceType as ServiceType, 
+                    customerName: formData.name, 
+                    customerPhone: formData.phone,
+                    customerEmail: formData.email,
+                    vehicleMake: formData.vehicleMake, 
+                    vehicleModel: formData.vehicleModel, 
+                    vehicleYear: formData.vehicleYear
+                });
+                
+                setStatus('success');
+                setTimeout(() => setStatus('idle'), 5000);
+            } else {
+                onLogRequest(`Denied: ${formData.name}, Booking Failed`);
+                setStatus('denied');
+            }
+        } else {
+            onLogRequest(`Denied: ${formData.name}, Slot Unavailable`);
+            setStatus('denied');
+        }
+    } catch (error) {
+        console.error("Booking error", error);
+        setStatus('denied');
     }
   };
 
@@ -51,10 +106,10 @@ const ServiceRequestForm: React.FC<ServiceRequestFormProps> = ({ onLogRequest, a
     <div className="bg-white rounded-xl shadow-lg p-8 border border-gray-100">
       <div className="mb-6"><h2 className="text-2xl font-bold">Request Service</h2></div>
       {status === 'success' ? (
-        <div className="bg-green-50 p-8 text-center rounded-lg text-green-800"><CheckCircle className="mx-auto mb-2"/>Confirmed!</div>
+        <div className="bg-green-50 p-8 text-center rounded-lg text-green-800"><CheckCircle className="mx-auto mb-2"/>Confirmed! Check your email.</div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
-          {status === 'denied' && <div className="bg-red-50 p-4 text-red-800 flex gap-2 rounded"><AlertCircle/> Slot Unavailable</div>}
+          {status === 'denied' && <div className="bg-red-50 p-4 text-red-800 flex gap-2 rounded"><AlertCircle/> Slot Unavailable or Error</div>}
           <div className="grid grid-cols-2 gap-4">
              <input type="text" name="name" required placeholder="Name" onChange={handleChange} className="p-2 border rounded w-full" />
              <input type="text" name="phone" required placeholder="Phone" onChange={handleChange} className="p-2 border rounded w-full" />
@@ -73,7 +128,10 @@ const ServiceRequestForm: React.FC<ServiceRequestFormProps> = ({ onLogRequest, a
              <input type="date" name="date" required onChange={handleChange} className="p-2 border rounded w-full" />
              <input type="time" name="time" required onChange={handleChange} className="p-2 border rounded w-full" />
           </div>
-          <button type="submit" className="w-full bg-brand-blue text-white py-3 rounded font-bold flex justify-center gap-2"><Send className="w-4 h-4"/> Book</button>
+          <button type="submit" disabled={status === 'loading'} className="w-full bg-brand-blue text-white py-3 rounded font-bold flex justify-center gap-2">
+            {status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>} 
+            {status === 'loading' ? 'Processing...' : 'Book Appointment'}
+          </button>
         </form>
       )}
     </div>
