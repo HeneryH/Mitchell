@@ -36,7 +36,6 @@ const App: React.FC = () => {
               <button onClick={connected ? disconnect : connect} className={`flex items-center gap-2 px-6 py-3 rounded-full font-semibold shadow-lg ${connected ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'bg-white text-blue-900'}`}>
                 {connected ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />} {connected ? 'Stop' : 'Talk to Schedule'}
               </button>
-              <a href="#request-service" className="px-6 py-3 border border-white/30 rounded-full font-semibold hover:bg-white/10">Book Online</a>
             </div>
             {connected && (
               <div className="mt-8 bg-white/10 backdrop-blur-md p-4 rounded-lg border border-white/20">
@@ -58,6 +57,7 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8"><CalendarView appointments={appointments} currentDate={currentDate} onDateChange={setCurrentDate} /></div>
           <div className="space-y-8">
+             <ServiceRequestForm onLogRequest={addLogEntry} appointments={appointments} addAppointment={addAppointment}/>
              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Clock className="text-brand-blue" /> Hours</h3>
                 <div className="space-y-2 text-sm text-gray-600">
@@ -73,10 +73,7 @@ const App: React.FC = () => {
              )}
           </div>
         </div>
-        <div id="request-service" className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <div><h2 className="text-3xl font-bold mb-4">Cant Talk?</h2><p className="text-lg text-gray-600 mb-6">Book online instantly.</p></div>
-            <ServiceRequestForm onLogRequest={addLogEntry} appointments={appointments} addAppointment={addAppointment}/>
-        </div>
+        
         <div id="team"><TeamSection /></div>
         <div id="testimonials"><Testimonials /></div>
       </main>
