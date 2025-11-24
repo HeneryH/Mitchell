@@ -1,3 +1,8 @@
+# Troublesome files
+Dockerfile
+nginx.conf
+index.html
+
 # Logs
 logs
 *.log
