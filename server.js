@@ -36,16 +36,28 @@ const sheets = google.sheets({ version: 'v4', auth });
 // Helper: Calculate end time while preserving wall-clock values
 // Input: "2023-11-25T14:00:00" -> Output: { start: "2023-11-25T14:00:00", end: "2023-11-25T15:00:00" }
 function calculateTimeWindow(startString, durationHours) {
-    // Treat the input string as UTC to do math, then strip the Z to keep it abstract
-    // This prevents Node.js from shifting the time based on the server's local timezone
-    const dateObj = new Date(startString.endsWith('Z') ? startString : startString + 'Z');
-    const endDateObj = new Date(dateObj.getTime() + durationHours * 3600000);
-    
-    // Return strings without 'Z', representing local wall time
-    return {
-        start: dateObj.toISOString().replace('Z', ''),
-        end: endDateObj.toISOString().replace('Z', '')
-    };
+    try {
+        // 1. Extract strict "YYYY-MM-DDTHH:MM:SS" part to ignore any offsets the AI might send
+        let cleanStart = startString;
+        const match = startString.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/);
+        if (match) {
+            cleanStart = match[1];
+        }
+
+        // 2. Treat as UTC for math (prevents local server offset issues)
+        const dateObj = new Date(cleanStart + 'Z');
+        if (isNaN(dateObj.getTime())) throw new Error("Invalid Date Format");
+
+        const endDateObj = new Date(dateObj.getTime() + durationHours * 3600000);
+        
+        // 3. Return ISO strings WITHOUT 'Z' (Wall Clock Time)
+        return {
+            start: dateObj.toISOString().replace('Z', ''),
+            end: endDateObj.toISOString().replace('Z', '')
+        };
+    } catch (e) {
+        throw new Error(`Date processing failed: ${startString}`);
+    }
 }
 
 // --- API Endpoints ---
@@ -55,7 +67,6 @@ app.get('/api/appointments', async (req, res) => {
   try {
     const { start, end } = req.query;
     
-    // We fetch a slightly wider range to be safe, or just trust the query params
     const allEvents = [];
 
     for (const [bayId, calendarId] of Object.entries(CALENDAR_IDS)) {
@@ -70,12 +81,10 @@ app.get('/api/appointments', async (req, res) => {
 
       if (response.data.items) {
         const bayEvents = response.data.items.map(event => {
-            // Parse summary "ServiceType - CustomerName"
             const summaryParts = (event.summary || '').split(' - ');
             const serviceType = summaryParts[0] || 'Unknown Service';
             const customerName = summaryParts.slice(1).join(' - ') || 'Unknown Customer';
 
-            // Parse description to extract other fields if possible
             const desc = event.description || '';
             const phoneMatch = desc.match(/Phone: (.*)/);
             const emailMatch = desc.match(/Email: (.*)/);
@@ -84,13 +93,12 @@ app.get('/api/appointments', async (req, res) => {
             return {
                 id: event.id,
                 bayId: bayId,
-                start: event.start.dateTime || event.start.date, // ISO string
-                end: event.end.dateTime || event.end.date,     // ISO string
+                start: event.start.dateTime || event.start.date, 
+                end: event.end.dateTime || event.end.date,     
                 serviceType: serviceType,
                 customerName: customerName,
                 customerPhone: phoneMatch ? phoneMatch[1] : '',
                 customerEmail: emailMatch ? emailMatch[1] : '',
-                // Put the full vehicle string in Make for display purposes since we can't easily split it back
                 vehicleMake: vehicleMatch ? vehicleMatch[1] : '', 
                 vehicleModel: '',
                 vehicleYear: '' 
@@ -110,16 +118,16 @@ app.get('/api/appointments', async (req, res) => {
 app.post('/api/availability', async (req, res) => {
   try {
     const { start, duration } = req.body;
-    // Calculate window maintaining abstract time
-    const { start: timeMin, end: timeMax } = calculateTimeWindow(start, duration);
+    
+    // 1. Get Wall Clock Strings (e.g. "2024-11-25T14:00:00")
+    const { start: startStr, end: endStr } = calculateTimeWindow(start, duration);
 
-    // Query Google Calendar FreeBusy API
-    // IMPORTANT: Do NOT append 'Z'. We send the wall-clock string and specify the timeZone.
-    // Google then checks if that clock time in New York is busy.
+    // 2. Query FreeBusy strictly using Wall Clock + Timezone
+    // IMPORTANT: Do NOT append 'Z'. Google will apply the timeZone to the floating string.
     const response = await calendar.freebusy.query({
       requestBody: {
-        timeMin: timeMin, 
-        timeMax: timeMax, 
+        timeMin: startStr, 
+        timeMax: endStr, 
         timeZone: 'America/New_York', 
         items: [{ id: CALENDAR_IDS.bay1 }, { id: CALENDAR_IDS.bay2 }]
       }
@@ -153,8 +161,8 @@ app.post('/api/book', async (req, res) => {
       summary: `${serviceType} - ${customerName}`,
       description: `Phone: ${customerPhone}\nEmail: ${customerEmail}\nVehicle: ${vehicle}`,
       start: { 
-        dateTime: startStr, // Sending "2023-11-25T14:00:00" (Floating)
-        timeZone: 'America/New_York' // Telling Google "That string is NY time"
+        dateTime: startStr, // e.g. "2024-11-25T14:00:00"
+        timeZone: 'America/New_York' // Force Google to treat above string as NY time
       },
       end: { 
         dateTime: endStr,
