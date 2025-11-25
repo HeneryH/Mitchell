@@ -20,30 +20,25 @@ const ServiceRequestForm: React.FC<ServiceRequestFormProps> = ({ onLogRequest, a
     e.preventDefault();
     setStatus('loading');
     
-    const start = new Date(`${formData.date}T${formData.time}`);
-    if (isNaN(start.getTime())) {
-        alert("Invalid Date");
-        setStatus('idle');
-        return;
-    }
+    // Construct Wall Clock Time string (YYYY-MM-DDTHH:MM:SS) strictly from inputs
+    // We do NOT use new Date() conversion here to avoid browser timezone shifting
+    const dateTimeString = `${formData.date}T${formData.time}:00`;
     const duration = getServiceDuration(formData.serviceType);
 
     try {
-        // 1. Check Availability for Bay 1
-        let assignedBayId = null;
-        
+        // 1. Check Availability
+        // The backend expects the literal string and will assume it is America/New_York time
         const checkBay1 = await fetch('/api/availability', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ start: start.toISOString(), duration })
+            body: JSON.stringify({ start: dateTimeString, duration })
         });
         const bay1Data = await checkBay1.json();
         
+        let assignedBayId = null;
         if (bay1Data.available && bay1Data.bayId === 'bay1') {
             assignedBayId = 'bay1';
         } else {
-            // Check Bay 2 if Bay 1 is busy (NOTE: Logic simplified, ideally backend handles bay selection)
-            // Since backend availability check queries both, let's trust the backend response if it suggests a bay.
             if (bay1Data.available) {
                 assignedBayId = bay1Data.bayId;
             }
@@ -56,7 +51,7 @@ const ServiceRequestForm: React.FC<ServiceRequestFormProps> = ({ onLogRequest, a
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     bayId: assignedBayId,
-                    start: start.toISOString(),
+                    start: dateTimeString,
                     duration,
                     serviceType: formData.serviceType,
                     customerName: formData.name,
@@ -68,8 +63,11 @@ const ServiceRequestForm: React.FC<ServiceRequestFormProps> = ({ onLogRequest, a
             const bookData = await bookRes.json();
 
             if (bookData.status === 'confirmed') {
-                // Update UI
+                // Update UI - Create local date object for immediate display
+                // new Date("2024-11-25T14:00:00") creates a local date at 14:00, matching the user's intent
+                const start = new Date(dateTimeString);
                 const end = new Date(start.getTime() + duration * 3600000);
+                
                 addAppointment({
                     id: bookData.eventId, 
                     bayId: assignedBayId, 
@@ -87,7 +85,7 @@ const ServiceRequestForm: React.FC<ServiceRequestFormProps> = ({ onLogRequest, a
                 setStatus('success');
                 setTimeout(() => setStatus('idle'), 5000);
             } else {
-                onLogRequest(`Denied: ${formData.name}, Booking Failed`);
+                onLogRequest(`Denied: ${formData.name}, Booking Failed: ${bookData.error || 'Unknown'}`);
                 setStatus('denied');
             }
         } else {
