@@ -48,6 +48,28 @@ function calculateTimeWindow(startString, durationHours) {
     };
 }
 
+// Helper: Convert NY Wall Time to UTC ISO String for FreeBusy Query
+// Input: "2024-11-25T14:00:00" (Implies NY Time) -> Output: "2024-11-25T19:00:00.000Z" (UTC)
+function getUtcFromNyTime(dateStr) {
+    // 1. Create a date object assuming the string is UTC (e.g. 14:00 UTC)
+    const date = new Date(dateStr + "Z");
+    
+    // 2. Ask JS what time that specific instant is in New York
+    // e.g., 14:00 UTC is 09:00 EST
+    const nyString = date.toLocaleString("en-US", {timeZone: "America/New_York"});
+    const nyDate = new Date(nyString); // 09:00 local system time
+    
+    // 3. Calculate the offset difference (milliseconds)
+    // 14:00 - 09:00 = 5 hours difference
+    const diff = date.getTime() - nyDate.getTime();
+    
+    // 4. Add that difference to the original timestamp to shift it to the correct UTC time
+    // 14:00 (NY Target) + 5 hours = 19:00 UTC
+    const trueUtc = new Date(date.getTime() + diff);
+    
+    return trueUtc.toISOString();
+}
+
 // --- API Endpoints ---
 
 // Get Appointments (For Calendar View)
@@ -110,15 +132,19 @@ app.get('/api/appointments', async (req, res) => {
 app.post('/api/availability', async (req, res) => {
   try {
     const { start, duration } = req.body;
-    // Calculate window maintaining abstract time
-    const { start: timeMin, end: timeMax } = calculateTimeWindow(start, duration);
+    
+    // 1. Get the Wall Clock Strings (e.g. "2024-11-25T14:00:00")
+    const { start: startStr, end: endStr } = calculateTimeWindow(start, duration);
 
-    // Query Google Calendar FreeBusy API
+    // 2. Convert those NY times to absolute UTC ISO strings for the query
+    const timeMinIso = getUtcFromNyTime(startStr);
+    const timeMaxIso = getUtcFromNyTime(endStr);
+
+    // Query Google Calendar FreeBusy API with precise UTC windows
     const response = await calendar.freebusy.query({
       requestBody: {
-        timeMin: timeMin + 'Z', // Fallback to treating it as UTC if strict ISO needed
-        timeMax: timeMax + 'Z', 
-        timeZone: 'America/New_York', 
+        timeMin: timeMinIso,
+        timeMax: timeMaxIso,
         items: [{ id: CALENDAR_IDS.bay1 }, { id: CALENDAR_IDS.bay2 }]
       }
     });
@@ -144,7 +170,7 @@ app.post('/api/book', async (req, res) => {
     const calendarId = CALENDAR_IDS[bayId];
     if (!calendarId) throw new Error('Invalid Bay ID');
 
-    // Calculate end time string
+    // Calculate end time string (Wall Clock)
     const { start: startStr, end: endStr } = calculateTimeWindow(start, duration);
 
     const event = {
