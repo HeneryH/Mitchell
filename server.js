@@ -60,6 +60,25 @@ function calculateTimeWindow(startString, durationHours) {
     }
 }
 
+// Helper: Convert NY Wall Time to UTC ISO String for FreeBusy Query
+// This is critical because FreeBusy requires UTC, but we have "2pm NY"
+function getUtcFromNyTime(dateStr) {
+    // 1. Parse as if it were UTC to get the raw numbers (e.g. 14:00 UTC)
+    const cleanStr = dateStr.replace(/Z$/, '');
+    const pseudoUtc = new Date(cleanStr + 'Z'); 
+    
+    // 2. See what that instant (14:00 UTC) looks like in NY (e.g. 09:00)
+    const nyTimeString = pseudoUtc.toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const nyDate = new Date(nyTimeString);
+    
+    // 3. Calculate offset (14:00 - 09:00 = 5 hours)
+    const offsetMs = pseudoUtc.getTime() - nyDate.getTime();
+    
+    // 4. Add offset to get the UTC time that corresponds to 14:00 NY
+    // (14:00 + 5 hours = 19:00 UTC)
+    return new Date(pseudoUtc.getTime() + offsetMs).toISOString();
+}
+
 // --- API Endpoints ---
 
 // Get Appointments (For Calendar View)
@@ -122,13 +141,16 @@ app.post('/api/availability', async (req, res) => {
     // 1. Get Wall Clock Strings (e.g. "2024-11-25T14:00:00")
     const { start: startStr, end: endStr } = calculateTimeWindow(start, duration);
 
-    // 2. Query FreeBusy strictly using Wall Clock + Timezone
-    // IMPORTANT: Do NOT append 'Z'. Google will apply the timeZone to the floating string.
+    // 2. Convert to strict UTC for FreeBusy Query
+    // FreeBusy API requires absolute timeMin/timeMax
+    const timeMinUtc = getUtcFromNyTime(startStr);
+    const timeMaxUtc = getUtcFromNyTime(endStr);
+
     const response = await calendar.freebusy.query({
       requestBody: {
-        timeMin: startStr, 
-        timeMax: endStr, 
-        timeZone: 'America/New_York', 
+        timeMin: timeMinUtc, 
+        timeMax: timeMaxUtc, 
+        timeZone: 'America/New_York', // Also hints the response timezone
         items: [{ id: CALENDAR_IDS.bay1 }, { id: CALENDAR_IDS.bay2 }]
       }
     });
