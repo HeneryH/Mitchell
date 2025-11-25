@@ -123,11 +123,13 @@ const ServiceRequestForm: React.FC<ServiceRequestFormProps> = ({ onLogRequest, a
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           {status === 'denied' && <div className="bg-red-50 p-4 text-red-800 flex gap-2 rounded"><AlertCircle/> Slot Unavailable or Error</div>}
+          
+          <input type="text" name="name" required placeholder="Name" onChange={handleChange} className="p-2 border rounded w-full" />
+          
           <div className="grid grid-cols-2 gap-4">
-             <input type="text" name="name" required placeholder="Name" onChange={handleChange} className="p-2 border rounded w-full" />
              <input type="text" name="phone" required placeholder="Phone" onChange={handleChange} className="p-2 border rounded w-full" />
+             <input type="email" name="email" required placeholder="Email Address" onChange={handleChange} className="p-2 border rounded w-full" />
           </div>
-          <input type="email" name="email" required placeholder="Email Address" onChange={handleChange} className="p-2 border rounded w-full" />
           
           <div className="grid grid-cols-3 gap-2">
              <input type="text" name="vehicleYear" placeholder="Year" onChange={handleChange} className="p-2 border rounded w-full" />
