@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SERVICES } from '../constants';
+import { SERVICES, OPERATING_HOURS } from '../constants';
 import { ServiceType, Appointment } from '../types';
 import { Send, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { getServiceDuration } from '../utils/dateUtils';
@@ -15,6 +15,21 @@ const ServiceRequestForm: React.FC<ServiceRequestFormProps> = ({ onLogRequest, a
     name: '', phone: '', email: '', serviceType: SERVICES[0].name, date: '', time: '', vehicleMake: '', vehicleModel: '', vehicleYear: ''
   });
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'denied'>('idle');
+
+  // Generate 30-minute slots based on operating hours
+  const timeSlots = [];
+  for (let h = OPERATING_HOURS.start; h < OPERATING_HOURS.end; h++) {
+    const hour = h.toString().padStart(2, '0');
+    timeSlots.push(`${hour}:00`);
+    timeSlots.push(`${hour}:30`);
+  }
+
+  const formatTimeDisplay = (time: string) => {
+    const [h, m] = time.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,7 +139,12 @@ const ServiceRequestForm: React.FC<ServiceRequestFormProps> = ({ onLogRequest, a
           </select>
           <div className="grid grid-cols-2 gap-4">
              <input type="date" name="date" required onChange={handleChange} className="p-2 border rounded w-full" />
-             <input type="time" name="time" required onChange={handleChange} className="p-2 border rounded w-full" />
+             <select name="time" required onChange={handleChange} value={formData.time} className="p-2 border rounded w-full">
+                <option value="">Select Time</option>
+                {timeSlots.map(time => (
+                  <option key={time} value={time}>{formatTimeDisplay(time)}</option>
+                ))}
+             </select>
           </div>
           <button type="submit" disabled={status === 'loading'} className="w-full bg-brand-blue text-white py-3 rounded font-bold flex justify-center gap-2">
             {status === 'loading' ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>} 
